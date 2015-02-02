@@ -1,0 +1,8 @@
+{application, gb_conf,
+ [{description, "LevelDB api"},
+  {vsn, "%VSN%"},
+  {modules, [%MODULES%]},
+  {registered, []},
+  {applications, [kernel, stdlib, sasl]},
+  {mod, {gb_conf,[]}}
+ ]}.
