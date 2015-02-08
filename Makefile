@@ -1,5 +1,5 @@
 include ./vsn.mk
-VSN=$(BG_CONF_VSN)
+VSN=$(GB_CONF_VSN)
 APP_NAME = gb_conf
 
 SUBDIRS = src

@@ -1,0 +1,7 @@
+{
+    "app_name": "gb_conf",
+    "params" : {
+	"db_mods" : ["gb_conf_db"],
+	"num_of_versions_to_keep": 5
+    }
+}

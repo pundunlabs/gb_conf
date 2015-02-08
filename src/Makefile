@@ -9,7 +9,9 @@ APP_SRC= $(APP_FILE).src
 APP_TARGET= $(EBIN)/$(APP_FILE)
 
 MODULES = \
-	gb_conf
+    gb_conf_app \
+    gb_conf_sup \
+    gb_conf
 
 ERL_FILES = $(MODULES:%=%.erl)
 
