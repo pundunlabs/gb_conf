@@ -10,7 +10,7 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    gb_log_sup:start_link().
+    gb_conf_sup:start_link().
 
 stop(_State) ->
     ok.

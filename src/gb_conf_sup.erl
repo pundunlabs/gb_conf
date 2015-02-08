@@ -11,7 +11,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/1]).
+-export([start_link/0]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -28,11 +28,11 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(ETC_PATH :: string()) -> {ok, Pid :: pid()} |
+-spec start_link() -> {ok, Pid :: pid()} |
 					  ignore |
 					  {error, Error :: term()}.
-start_link(ETC_PATH) ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, [ETC_PATH]).
+start_link() ->
+    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -51,7 +51,7 @@ start_link(ETC_PATH) ->
 %%                     {error, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([ETC_PATH]) ->
+init([]) ->
     RestartStrategy = one_for_one,
     MaxRestarts = 1000,
     MaxSecondsBetweenRestarts = 3600,
@@ -62,7 +62,7 @@ init([ETC_PATH]) ->
     Shutdown = 2000,
     Type = worker,
 
-    AChild = {'gb_conf', {'gb_conf', start_link, [ETC_PATH]},
+    AChild = {'gb_conf', {'gb_conf', start_link, []},
 	      Restart, Shutdown, Type, ['gb_conf']},
 
     {ok, {SupFlags, [AChild]}}.

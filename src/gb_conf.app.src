@@ -1,8 +1,8 @@
 {application, gb_conf,
- [{description, "LevelDB api"},
+ [{description, "Growbeard Configuration Manager"},
   {vsn, "%VSN%"},
   {modules, [%MODULES%]},
   {registered, []},
   {applications, [kernel, stdlib, sasl]},
-  {mod, {gb_conf,[]}}
+  {mod, {gb_conf_app,[]}}
  ]}.

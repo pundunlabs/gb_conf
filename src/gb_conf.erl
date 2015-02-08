@@ -11,7 +11,9 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1]).
+-export([db_init/0]).
+
+-export([start_link/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -31,18 +33,38 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
+%%--------------------------------------------------------------------
+%% @doc
+%% Initialize the Mnesia database for the node. This function is intended
+%% to be used once at configuration phase of the system.
+%%
+%%--------------------------------------------------------------------
+-spec db_init() -> ok.
+db_init()->
+    %% Read the configuration to get mnesia topology
+    PrivDir = code:priv_dir(gb_conf),
+    Filename = filename:join(PrivDir, "gb_conf.json"),
+    error_logger:info_msg("GB Configuration: Read  ~p~n", [Filename]),
+    case file:read_file(Filename) of
+        {ok, Binary} ->
+            %% Process binary and
+            %%gb_conf_db:create_tables(Conf),
+            ok;
+        {error, Reason} ->
+            error_logger:error_msg("file:read_file(~p) -> ~p.~n", [Filename, {error, Reason}])
+    end.
+    
 %%--------------------------------------------------------------------
 %% @doc
 %% Starts the gb_conf server with given path to ect folder where gb_conf.cfg is placed.
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(ETC_PATH :: string()) -> {ok, Pid :: pid()} |
+-spec start_link() -> {ok, Pid :: pid()} |
 					  ignore |
 					  {error, Error :: term()}.
-start_link(ETC_PATH) ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [ETC_PATH], []).
+start_link() ->
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -124,9 +146,9 @@ activate(JSON, Version)->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([ETC_PATH]) ->
-    gb_conf_db:create_tables(),
-    Filename = filename:join(ETC_PATH, "gb_conf.json"),
+init([]) ->
+    Filename = filename:join(code:priv_dir(gb_conf), "gb_conf.json"),
+    error_logger:info_msg("~p:init/0 read configuration: ~p~n", [?MODULE, Filename]),
     case file:read_file(Filename) of
 	{ok, Binary} ->	    
 	    {ok, #state{}};
