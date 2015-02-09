@@ -22,6 +22,8 @@ x86_64-unknown-linux-gnu
 *\#
 */.#*
 erl_crash.dump
+#ignore vim swp
+*.swp
 
 #ignore generated libraries
 */leveldb_nif.so

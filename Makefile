@@ -6,7 +6,7 @@ SUBDIRS = src
 
 .PHONY: all subdirs $(SUBDIRS) edoc eunit clean
 
-all: edoc subdirs eunit
+all: edoc subdirs
 
 subdirs: $(SUBDIRS)
 
