@@ -19,7 +19,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
 
--export([get_param/2]).
+-export([get_param/2,
+         get_param/3]).
 
 -export([list/0,
 	     versions/1,
@@ -32,7 +33,7 @@
 
 -include("gb_conf.hrl").
 
--record(state, {}).
+-record(state, {conf}).
 
 %%%===================================================================
 %%% API
@@ -60,7 +61,8 @@ db_init()->
             application:start(mnesia),
             CT_Result = [Mod:create_tables(MnesiaNodes)|| Mod <- DbMods],
             error_logger:info_msg("Create Tables: ~p~n", [CT_Result]),
-            AppConf = #gb_conf_appconf{appname = gb_conf,
+            AppConf = #gb_conf_appconf{name = "gb_conf.json",
+                                       appname = gb_conf,
                                        file = Filename,
                                        version = undefined,
                                        active = false,
@@ -68,20 +70,38 @@ db_init()->
             MaxKeeps = find_param(num_of_versions_to_keep, Conf),
             {ok, Version} = store(AppConf, MaxKeeps),
             error_logger:info_msg("Stored configuration of gb_conf app, Version: ~p~n",[Version]),
-            do_activate(gb_conf, Version);
+            do_activate("gb_conf.json", Version),
+            Configurations = find_param(configurations, Conf),
+            ok = init_load(Configurations, MaxKeeps);
         {error, Reason} ->
             {error, Reason}
     end.
-
+    
+%%--------------------------------------------------------------------
+%% @doc
+%% Get param for given JSON file basename and key. If not found, return undefined
+%%
+%%--------------------------------------------------------------------
+-spec get_param(JSON :: string(), Key :: atom())-> Value :: term() | undefined.
+get_param(JSON, Key) ->
+    get_param(JSON, Key, undefined). 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get param for given application and key.
+%% Get param for given JSON file basename and key. If not found, return Default
 %%
 %%--------------------------------------------------------------------
--spec get_param(Application :: atom(), Key :: atom()) -> Value :: term() | undefined.
-get_param(_,_) ->
-    undefined.
+-spec get_param(JSON :: string(), Key :: atom(), Default :: term())-> Value :: term().
+get_param(JSON, Key, Default) ->
+    case get_active_conf(JSON) of
+        #gb_conf_appconf{conf = Conf} ->
+            case find_param(Key, Conf) of
+                undefined -> Default;
+                Value -> Value
+            end;
+        _ ->    
+            Default
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -119,12 +139,12 @@ versions(JSON)->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Show contents of the provided configuration file.
+%% Show contents of active version of the provided configuration file.
 %% @end
 %%--------------------------------------------------------------------
 -spec show(JSON :: string())-> {ok, atom()} | {error, Error :: term()}.
 show(JSON) ->
-        gen_server:call(?SERVER, {show, JSON, latest}).
+        gen_server:call(?SERVER, {show, JSON, active}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -134,14 +154,14 @@ show(JSON) ->
 -spec show(JSON :: string(), Version :: pos_integer()) -> {ok, atom()} |
 							  {error, Error :: term()}.
 show(JSON, Version) ->
-        gen_server:call(?SERVER, {versions, JSON, Version}).
+        gen_server:call(?SERVER, {show, JSON, Version}).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Load the provided configuration file.
 %% @end
 %%--------------------------------------------------------------------
--spec load(JSON :: string())-> {ok, atom()} | {error, Error :: term()}.
+-spec load(JSON :: string())-> {ok, Version::pos_integer()} | {error, Error :: term()}.
 load(JSON)->
     gen_server:call(?SERVER, {load, JSON}).
 
@@ -162,7 +182,7 @@ activate(JSON)->
 -spec activate(JSON :: string(), Version :: pos_integer())-> {ok, atom()} |
 							     {error, Error :: term()}.
 activate(JSON, Version)->
-        gen_server:call(?SERVER, {versions, JSON, Version}).
+        gen_server:call(?SERVER, {activate, JSON, Version}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -176,13 +196,13 @@ activate(JSON, Version)->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    Filename = filename:join(code:priv_dir(gb_conf), "gb_conf.json"),
-    error_logger:info_msg("~p:init/0 read configuration: ~p~n", [?MODULE, Filename]),
-    case file:read_file(Filename) of
-	{ok, Binary} ->	    
-	    {ok, #state{}};
-	{error, Reason} ->
-	    {stop, Reason}
+    error_logger:info_msg("Starting gb_conf application~n", []),
+    
+    case get_active_conf("gb_conf.json") of
+        #gb_conf_appconf{conf = Conf} ->
+            {ok, #state{conf = Conf}};
+        _ ->    
+            {stop, no_conf_stored}
     end.
 
 %%--------------------------------------------------------------------
@@ -200,19 +220,65 @@ init([]) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_call(list, _From, State) ->
-    Reply = ok,
+    Reply = 
+        case gb_conf_db:transaction(fun()-> mnesia:all_keys(gb_conf_appconf) end) of
+            {atomic, AllKeys} ->
+                AllKeys;
+            {error, Reason} ->
+                {error, Reason}
+        end,
     {reply, Reply, State};
 handle_call({versions, JSON}, _From, State) ->
-    Reply = ok,
+    Reply = 
+        case gb_conf_db:transaction(fun()-> mnesia:read(gb_conf_appconf, JSON) end) of
+            {atomic, AppConfList} ->
+                [begin #gb_conf_appconf{name = JSON, version = V, active = A} = C, {V,A} end || C <- AppConfList];
+            {error, Reason} ->
+                {error, Reason}
+        end,
     {reply, Reply, State};
-handle_call({show, JSON, Version}, _From, State) ->
-    Reply = ok,
+handle_call({show, JSON, active}, _From, State) ->        
+    Reply = get_active_conf(JSON), 
     {reply, Reply, State};
-handle_call({load, JSON}, _From, State) ->
-    Reply = ok,
+handle_call({show, JSON, Version}, _From, State) ->        
+    Reply = 
+        case gb_conf_db:transaction(fun()-> mnesia:read(gb_conf_appconf, JSON) end) of
+            {atomic, AppConfList} ->
+                V = case Version of
+                        latest -> find_top_version(AppConfList);
+                        _ -> Version
+                    end,
+                case lists:keyfind(V, #gb_conf_appconf.version, AppConfList) of
+                    false ->
+                        undefined;
+                    AppConf ->
+                        AppConf
+                end;
+            {error, Reason} ->
+                {error, Reason}
+        end,
+    {reply, Reply, State};
+handle_call({load, "gb_conf.json"}, _From, #state{conf = Conf} = State) ->
+    MaxKeeps = find_param(num_of_versions_to_keep, Conf),
+    Reply = do_load(gb_conf, "gb_conf.json", MaxKeeps),
+    {reply, Reply, State};
+handle_call({load, JSON}, _From, #state{conf = Conf} = State) ->
+    Configurations = find_param(configurations, Conf),
+    Reply =
+        case lists:keyfind(JSON, 2, Configurations) of
+            false ->
+                {error, unknown_conf};
+            {AppName, JSON} ->
+                MaxKeeps = find_param(num_of_versions_to_keep, Conf),
+                do_load(AppName, JSON, MaxKeeps)
+        end,
     {reply, Reply, State};
 handle_call({activate, JSON, Version}, _From, State) ->
-    Reply = ok,
+    V = case Version of
+        latest -> get_latest_conf_version(JSON);
+        _ -> Version
+        end,
+    Reply = do_activate(JSON, V),
     {reply, Reply, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -325,6 +391,70 @@ json_to_term([V | Rest], Acc) when is_integer(V) ->
 json_to_term([V | Rest], Acc) when is_float(V) ->
     json_to_term(Rest, [V | Acc]).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Load given configuration files for application AppName.
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec do_load(AppName::atom(), File::string(), MaxKeeps::pos_integer()) -> ok | {error, Reason::term()}.
+do_load(AppName, File, MaxKeeps)->
+    case code:priv_dir(AppName) of
+        {error, Reason} ->
+            error_logger:error_msg("Cannot get priv_dir for app: ~p~n", [AppName]);
+        PrivDir ->
+            Filename = filename:join(PrivDir, File),
+            case read_config(Filename) of
+                {ok, Conf} ->
+                    AppConf = #gb_conf_appconf{name = File,
+                                               appname = AppName,
+                                               file = Filename,
+                                               version = undefined,
+                                               active = false,
+                                               conf = Conf},
+                    case store(AppConf, MaxKeeps) of
+                        {ok, Version} ->
+                            error_logger:info_msg("Stored configuration of gb_conf app, Version: ~p~n",[Version]),
+                            {ok, Version};
+                        Else ->
+                            Else
+                    end;
+                {error, Reason} ->
+                    error_logger:error_msg("Cannot read configuration for app: ~p file: ~p", [AppName, File]),
+                    {error, Reason}
+            end
+    end.
+%%--------------------------------------------------------------------
+%% @doc
+%% Initial load for declared applications and configuration files.
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec init_load(Configurations::[{AppName::atom(), File::string()}], MaxKeeps::pos_integer()) -> ok.
+init_load([], _) ->
+    ok;
+init_load([{AppName, File} | Rest], MaxKeeps) ->
+    case code:priv_dir(AppName) of
+        {error, Reason} ->
+            error_logger:error_msg("Cannot get priv_dir for app: ~p~n", [AppName]);
+        PrivDir ->
+            Filename = filename:join(PrivDir, File),
+            case read_config(Filename) of
+                {ok, Conf} ->
+                    AppConf = #gb_conf_appconf{name = File,
+                                               appname = AppName,
+                                               file = Filename,
+                                               version = undefined,
+                                               active = false,
+                                               conf = Conf},
+                    {ok, Version} = store(AppConf, MaxKeeps),
+                    error_logger:info_msg("Stored configuration of gb_conf app, Version: ~p~n",[Version]),
+                    do_activate(File, Version);
+                {error, Reason} ->
+                    error_logger:error_msg("Cannot read configuration for app: ~p file: ~p", [AppName, File])
+            end
+    end,
+    init_load(Rest, MaxKeeps).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -342,7 +472,7 @@ find_param(Key, Conf)->
     end.
 
 -spec store(AppConf :: #gb_conf_appconf{}, MaxKeep::pos_integer()) -> {ok, Version :: pos_integer()} | {error, Reason::term()}.
-store(#gb_conf_appconf{appname = Name} = AppConf, MaxKeep) when is_integer(MaxKeep)->
+store(#gb_conf_appconf{name = Name} = AppConf, MaxKeep) when is_integer(MaxKeep)->
     Transaction =
     fun () ->
         AppConfList = mnesia:read(gb_conf_appconf, Name),
@@ -374,11 +504,11 @@ store(#gb_conf_appconf{appname = Name} = AppConf, MaxKeep) when is_integer(MaxKe
             {error, Reason}
     end.
 
--spec do_activate(AppName:: atom(), Version::pos_integer()) -> ok | {error, Reason::term()}.
-do_activate(AppName, Version)->
+-spec do_activate(Name:: string(), Version::pos_integer()) -> ok | {error, Reason::term()}.
+do_activate(Name, Version) when is_integer(Version)->
     Transaction =
         fun() ->
-            AppConfList = mnesia:read(gb_conf_appconf, AppName),
+            AppConfList = mnesia:read(gb_conf_appconf, Name),
             ActiveConf = find_active_conf(AppConfList),
             InactiveConf = find_version_conf(AppConfList, Version),
     
@@ -391,7 +521,10 @@ do_activate(AppName, Version)->
             mnesia:delete_object(InactiveConf),
             mnesia:write(InactiveConf#gb_conf_appconf{active = true})
         end,
-    gb_conf_db:transaction(Transaction). 
+    case gb_conf_db:transaction(Transaction) of
+        {atomic, ok} -> ok;
+        Else -> Else
+    end. 
 
 -spec find_bottom_version(AppConfList :: [#gb_conf_appconf{}]) -> Version :: integer().
 find_bottom_version(AppConfList)->
@@ -435,4 +568,27 @@ find_version_conf([#gb_conf_appconf{version = V} = Active| _], V)->
 find_version_conf([_| Rest], V)->
     find_version_conf(Rest, V).
 
+-spec get_active_conf(JSON::string())-> #gb_conf_appconf{} | undefined | {error, Reason::term()}.
+get_active_conf(JSON) ->
+    Reply = 
+        case gb_conf_db:transaction(fun()-> mnesia:read(gb_conf_appconf, JSON) end) of
+            {atomic, AppConfList} ->
+                case find_active_conf(AppConfList) of
+                    undefined ->
+                        undefined;
+                    AppConf ->
+                        AppConf
+                end;
+            {error, Reason} ->
+                {error, Reason}
+        end.
+
+-spec get_latest_conf_version(JSON::string())-> #gb_conf_appconf{} | undefined | {error, Reason::term()}.
+get_latest_conf_version(JSON) ->
+    case gb_conf_db:transaction(fun()-> mnesia:read(gb_conf_appconf, JSON) end) of
+        {atomic, AppConfList} ->
+            find_top_version(AppConfList);
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
