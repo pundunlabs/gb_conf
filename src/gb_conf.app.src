@@ -3,6 +3,6 @@
   {vsn, "%VSN%"},
   {modules, [%MODULES%]},
   {registered, []},
-  {applications, [kernel, stdlib, sasl]},
-  {mod, {gb_conf_app,[]}}
+  {applications, [kernel, stdlib, sasl]}%%,
+  %%{mod, {gb_conf_app,[]}}
  ]}.

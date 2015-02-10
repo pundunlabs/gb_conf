@@ -5,6 +5,7 @@
                          file       :: string(),
                          version    :: pos_integer(),
                          active     :: boolean(),
+                         tag        :: string(),
                          conf       :: [{atom, term()}]
                          }).
 
