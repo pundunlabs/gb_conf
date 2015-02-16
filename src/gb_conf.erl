@@ -314,12 +314,17 @@ notify_cb(JSON) ->
 read_config(Filename) ->
     case file:read_file(Filename) of
         {ok, Binary} ->
-            JsonTypes = mochijson2:decode(Binary, [{format, proplist}]),
-            case json_to_term(JsonTypes) of
-                {ok, Conf} ->
-                    {ok, Conf};
-                {error, Reason} ->
-                    {error, Reason}
+            case catch mochijson2:decode(Binary, [{format, proplist}]) of
+                {'EXIT', Reason} ->
+                    error_logger:error_msg("file:read_file(~p) -> ~p.~n", [Filename, {'EXIT', Reason}]),
+                    {error, {'EXIT', Reason}};
+                JsonTypes ->
+                    case json_to_term(JsonTypes) of
+                        {ok, Conf} ->
+                            {ok, Conf};
+                        {error, Reason} ->
+                            {error, Reason}
+                    end
             end;
         {error, Reason} ->
             error_logger:error_msg("file:read_file(~p) -> ~p.~n", [Filename, {error, Reason}])
