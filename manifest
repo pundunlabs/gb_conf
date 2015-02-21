@@ -1,5 +1,5 @@
 #gb_conf requires mochijson2 app
 deps:
-	http://skelter/gits/mochijson2.git
+	http://skelter/gits/mochiweb.git
 build:
 	make all
