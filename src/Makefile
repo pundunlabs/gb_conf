@@ -10,20 +10,29 @@ APP_TARGET= $(EBIN)/$(APP_FILE)
 
 MODULES = \
 	gb_conf \
-	gb_conf_db
+	gb_conf_db \
+	gb_conf_env \
 
 ERL_FILES = $(MODULES:%=%.erl)
+ERL_BEAMS = $(MODULES:%=$(EBIN)/%.beam)
 
 INCLUDE_DIRS = \
 	../include
 
-.PHONY: all clean
+ERL_INCLUDE = $(INCLUDE_DIRS:%=-I %)
 
-all: $(EBIN) $(APP_TARGET)
+.PHONY: all clean beams
+
+all: $(EBIN) $(APP_TARGET) beams
 	erlc -I $(INCLUDE_DIRS) -o $(EBIN) $(ERL_FILES)
 
+beams: $(ERL_BEAMS)
+
+$(EBIN)/%.beam: %.erl
+	erlc $(ERL_INCLUDE) -o $(EBIN) $<
+
 $(EBIN):
-	mkdir ../ebin
+	mkdir $@
 
 $(APP_TARGET): $(APP_SRC) 
 	@set -e; mods=`echo $(MODULES) | sed -e 's; ;,;g'` ; \
