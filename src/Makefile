@@ -24,7 +24,6 @@ ERL_INCLUDE = $(INCLUDE_DIRS:%=-I %)
 .PHONY: all clean beams
 
 all: $(EBIN) $(APP_TARGET) beams
-	erlc -I $(INCLUDE_DIRS) -o $(EBIN) $(ERL_FILES)
 
 beams: $(ERL_BEAMS)
 

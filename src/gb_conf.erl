@@ -15,12 +15,12 @@
          get_param/3]).
 
 -export([list/0,
-	     versions/1,
-	     show/1, show/2,
-	     load/1,
-	     activate/1, activate/2,
-         tag/3
-	    ]).
+	 versions/1,
+	 show/1, show/2,
+	 load/1,
+	 activate/1, activate/2,
+	 tag/3
+	]).
 
 -export([notify/0]).
 
