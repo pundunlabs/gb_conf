@@ -4,7 +4,7 @@
     "verify_cb" : ["gb_conf", "verify"],
     "params" : {
         "mnesia_nodes" : ["pundun@sitting"],
-        "db_mods" : ["gb_conf_db", "enterdb_db"],
+        "db_mods" : ["gb_conf_db", "gb_hash_db", "enterdb_db"],
         "num_of_versions_to_keep": 5,
         "configurations": {"enterdb" : "enterdb.json",
                            "gb_log" : "gb_log.json"}
