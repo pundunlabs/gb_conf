@@ -1,7 +1,7 @@
 {application, gb_conf,
  [{description, "Growbeard Configuration Manager"},
-  {vsn, "%VSN%"},
-  {modules, [%MODULES%]},
+  {vsn, "0.1"},
+  {modules, []},
   {registered, []},
   {applications, [kernel, stdlib, sasl]}%%,
   %%{mod, {gb_conf_app,[]}}
