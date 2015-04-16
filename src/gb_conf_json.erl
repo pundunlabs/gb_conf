@@ -6,7 +6,7 @@
 %%% @end
 %%% Created :  2 Feb 2015 by erdem <erdem@sitting>
 %%%-------------------------------------------------------------------
--module(gb_conf).
+-module(gb_conf_json).
 
 %% API
 -export([db_init/0]).
@@ -39,47 +39,38 @@
 db_init()->
     %% Read the configuration to get mnesia topology
     PrivDir = code:priv_dir(gb_conf),
-    Filename = filename:join(PrivDir, "gb_conf.yaml"),
+    Filename = filename:join(PrivDir, "gb_conf.json"),
     error_logger:info_msg("GB Configuration: Read  ~p~n", [Filename]),
-    application:start(yamerl),
     case read_config(Filename) of
-        {ok, [Conf|_]} ->
+        {ok, Conf} ->
             error_logger:info_msg("read_config(~p) -> ~p.~n", [Filename, {ok, Conf}]),
-            MnesiaNodes = case find_param("mnesia_nodes", Conf) of
-			    [] ->
-				[node()];
-			    Nodes ->
-				[erlang:list_to_atom(N) || N <- Nodes]
-			  end,
-            DbMods = [erlang:list_to_atom(M) || M <- find_param("db_mods", Conf)],
+            MnesiaNodes = [erlang:list_to_atom(N) || N <- find_param(mnesia_nodes, Conf)],
+            DbMods = [erlang:list_to_atom(M) || M <- find_param(db_mods, Conf)],
             CS_Result = gb_conf_db:create_schema(MnesiaNodes),
             error_logger:info_msg("gb_conf_db:create_schema(~p) -> ~p~n",
                 [MnesiaNodes, CS_Result]),
             application:start(mnesia),
             CT_Result = [Mod:create_tables(MnesiaNodes)|| Mod <- DbMods],
             error_logger:info_msg("Create Tables: ~p~n", [CT_Result]),
-            AppConf = #gb_conf_appconf{name = "gb_conf.yaml",
-                                       appname = "gb_conf",
+            AppConf = #gb_conf_appconf{name = "gb_conf.json",
+                                       appname = gb_conf,
                                        file = Filename,
                                        version = undefined,
                                        active = false,
                                        conf = Conf},
-            MaxKeeps = find_param("num_of_versions_to_keep", Conf),
+            MaxKeeps = find_param(num_of_versions_to_keep, Conf),
             {ok, Version} = store(AppConf, MaxKeeps),
             error_logger:info_msg("Stored configuration of gb_conf app, Version: ~p~n",[Version]),
-            do_activate("gb_conf.yaml", Version),
-            Configurations = find_param("configurations", Conf),
+            do_activate("gb_conf.json", Version),
+            Configurations = find_param(configurations, Conf),
             ok = init_load(Configurations, MaxKeeps);
-	{ok, []} ->
-            error_logger:error_msg("Empty configuration file: ~p", [Filename]),
-	    {error, "no_yaml_doc"};
         {error, Reason} ->
             {error, Reason}
     end.
     
 %%--------------------------------------------------------------------
 %% @doc
-%% Notification function to be called when a gb_conf.yaml document
+%% Notification function to be called when a gb_conf.json document
 %% version is activated.
 %%--------------------------------------------------------------------
 -spec notify() -> ok | {error, Reason::term()}.
@@ -87,10 +78,10 @@ notify()->
     error_logger:info_msg("~p:notify/0 called..~n",[?MODULE]),
     Transaction =
         fun()->
-            case get_active_conf("gb_conf.yaml") of
+            case get_active_conf("gb_conf.json") of
                 #gb_conf_appconf{conf = Conf} ->
-                    MaxKeep = find_param("num_of_versions_to_keep", Conf),
-                    Configurations = find_param("configurations", Conf),
+                    MaxKeep = find_param(num_of_versions_to_keep, Conf),
+                    Configurations = find_param(configurations, Conf),
                     ok = check_configurations(Configurations, MaxKeep),
                     ok = check_num_of_versions_to_keep(MaxKeep);
                 _ ->    
@@ -107,28 +98,21 @@ notify()->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get param for given YAML file basename and key. If not found, return undefined
+%% Get param for given JSON file basename and key. If not found, return undefined
 %%
 %%--------------------------------------------------------------------
--spec get_param(File :: string(), Key :: string() | atom())->
-    Value :: term() | undefined.
-get_param(File, Key) when is_atom(Key) ->
-    get_param(File, atom_to_list(Key));
-get_param(File, Key) ->
-    get_param(File, Key, undefined). 
+-spec get_param(JSON :: string(), Key :: atom())-> Value :: term() | undefined.
+get_param(JSON, Key) ->
+    get_param(JSON, Key, undefined). 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Get param for given YAML file basename and key. If not found, return Default
+%% Get param for given JSON file basename and key. If not found, return Default
 %%
 %%--------------------------------------------------------------------
--spec get_param(File :: string(),
-		Key :: string() | atom(),
-		Default :: term()) -> Value :: term().
-get_param(File, Key, Default) when is_atom(Key) ->
-    get_param(File, atom_to_list(Key), Default);
-get_param(File, Key, Default) ->
-    case get_active_conf(File) of
+-spec get_param(JSON :: string(), Key :: atom(), Default :: term())-> Value :: term().
+get_param(JSON, Key, Default) ->
+    case get_active_conf(JSON) of
         #gb_conf_appconf{conf = Conf} ->
             case find_param(Key, Conf) of
                 undefined -> Default;
@@ -143,7 +127,7 @@ get_param(File, Key, Default) ->
 %% List the configuration files that are loaded on the system
 %% @end
 %%--------------------------------------------------------------------
--spec list()-> {ok, string()} | {error, Error :: term()}.
+-spec list()-> {ok, atom()} | {error, Error :: term()}.
 list()->
     case gb_conf_db:transaction(fun()-> mnesia:all_keys(gb_conf_appconf) end) of
         {atomic, AllKeys} ->
@@ -157,13 +141,12 @@ list()->
 %% List the versions of a configuration file that is loaded on the system.
 %% @end
 %%--------------------------------------------------------------------
--spec versions(File :: string())->
-    [{string(), term()}] | {error, Error :: term()}.
-versions(File)->
-    case gb_conf_db:transaction(fun()-> mnesia:read(gb_conf_appconf, File) end) of
+-spec versions(JSON :: string())-> {ok, atom()} | {error, Error :: term()}.
+versions(JSON)->
+    case gb_conf_db:transaction(fun()-> mnesia:read(gb_conf_appconf, JSON) end) of
         {atomic, AppConfList} ->
             [begin
-                #gb_conf_appconf{name = File, version = V, active = A} = C,
+                #gb_conf_appconf{name = JSON, version = V, active = A} = C,
                 {V,A}
              end || C <- AppConfList];
         {error, Reason} ->
@@ -175,19 +158,19 @@ versions(File)->
 %% Show contents of active version of the provided configuration file.
 %% @end
 %%--------------------------------------------------------------------
--spec show(File :: string())-> {ok, atom()} | {error, Error :: term()}.
-show(File) ->
-    get_active_conf(File).
+-spec show(JSON :: string())-> {ok, atom()} | {error, Error :: term()}.
+show(JSON) ->
+    get_active_conf(JSON).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Show contents of the provided version of the provided configuration file.
 %% @end
 %%--------------------------------------------------------------------
--spec show(File :: string(), Version :: pos_integer()) ->
-    {ok, string()} | {error, Error :: term()}.
-show(File, Version) ->
-    case gb_conf_db:transaction(fun()-> mnesia:read(gb_conf_appconf, File) end) of
+-spec show(JSON :: string(), Version :: pos_integer()) -> {ok, atom()} |
+							  {error, Error :: term()}.
+show(JSON, Version) ->
+    case gb_conf_db:transaction(fun()-> mnesia:read(gb_conf_appconf, JSON) end) of
         {atomic, AppConfList} ->
             V = 
                 case Version of
@@ -207,13 +190,12 @@ show(File, Version) ->
 %% Load the provided configuration file.
 %% @end
 %%--------------------------------------------------------------------
--spec load(File :: string())->
-    {ok, Version::pos_integer()} | {error, Error :: term()}.
-load("gb_conf.yaml")->
+-spec load(JSON :: string())-> {ok, Version::pos_integer()} | {error, Error :: term()}.
+load("gb_conf.json")->
     Transaction =
         fun() ->
-            MaxKeeps = get_param("gb_conf.yaml", "num_of_versions_to_keep"),
-            do_load("gb_conf", "gb_conf.yaml", MaxKeeps)
+            MaxKeeps = get_param("gb_conf.json", num_of_versions_to_keep),
+            do_load(gb_conf, "gb_conf.json", MaxKeeps)
         end,
     case gb_conf_db:transaction(Transaction) of
         {atomic, {ok, Version}} ->
@@ -221,16 +203,16 @@ load("gb_conf.yaml")->
         {error, Reason} ->
             {error, Reason}
     end;
-load(File) ->
+load(JSON) ->
     Transaction =
         fun() ->
-            Configurations = get_param("configurations", "gb_conf.yaml"),
-            case lists:keyfind(File, 2, Configurations) of
+            Configurations = get_param(configurations, "gb_conf.json"),
+            case lists:keyfind(JSON, 2, Configurations) of
                 false ->
                     {error, unknown_conf};
-                {AppName, File} ->
-                    MaxKeeps = get_param("gb_conf.yaml", "num_of_versions_to_keep"),
-                    do_load(AppName, File, MaxKeeps)
+                {AppName, JSON} ->
+                    MaxKeeps = get_param("gb_conf.json", num_of_versions_to_keep),
+                    do_load(AppName, JSON, MaxKeeps)
             end
         end,
     case gb_conf_db:transaction(Transaction) of
@@ -245,27 +227,28 @@ load(File) ->
 %% Activate the latest loaded version of the provided configuration file.
 %% @end
 %%--------------------------------------------------------------------
--spec activate(File :: string())-> ok | {error, Error :: term()}.
-activate(File)->
-    activate(File, latest).
+-spec activate(JSON :: string())-> ok | {error, Error :: term()}.
+activate(JSON)->
+    activate(JSON, latest).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Activate the provided version of the provided configuration file.
 %% @end
 %%--------------------------------------------------------------------
--spec activate(File :: string(), Version :: pos_integer() | latest) ->
-    ok | {error, Error :: term()}.
-activate(File, Version)->
+-spec activate(JSON :: string(), Version :: pos_integer() | latest)->
+                                 ok |
+							     {error, Error :: term()}.
+activate(JSON, Version)->
     Transaction =
         fun()->
             V = case Version of
-                latest -> get_latest_conf_version(File);
+                latest -> get_latest_conf_version(JSON);
                 _ -> Version
                 end,
-            case do_activate(File, V) of
+            case do_activate(JSON, V) of
                 ok ->
-                    notify_cb(File);
+                    notify_cb(JSON);
                 Else ->
                     Else
             end
@@ -279,15 +262,16 @@ activate(File, Version)->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Add a string tag to the provided YAML File's provided Version.
+%% Add a string tag to the provided JSON Document's provided Version.
 %% @end
 %%--------------------------------------------------------------------
--spec tag(File :: string(), Version :: pos_integer(), Tag :: string())->
-    ok | {error, Error :: term()}.
-tag(File, Version, Tag)->
+-spec tag(JSON :: string(), Version :: pos_integer(), Tag :: string())->
+                                 ok |
+							     {error, Error :: term()}.
+tag(JSON, Version, Tag)->
     Transaction =
         fun()->
-            do_tag(File, Version, Tag)
+            do_tag(JSON, Version, Tag)
         end,
     case gb_conf_db:transaction(Transaction) of
         {atomic, Result} ->
@@ -295,6 +279,7 @@ tag(File, Version, Tag)->
         {error, Reason} ->
             {error, Reason}
     end.
+
 
 %%%===================================================================
 %%% Internal functions
@@ -305,11 +290,11 @@ tag(File, Version, Tag)->
 %% Call notify callback module:function if configured in given configuration
 %% @end
 %%--------------------------------------------------------------------
--spec notify_cb(File :: string()) -> ok | {error, Reason::term()}.
-notify_cb(File) ->
-    case get_active_conf(File) of
+-spec notify_cb(JSON :: string()) -> ok | {error, Reason::term()}.
+notify_cb(JSON) ->
+    case get_active_conf(JSON) of
         #gb_conf_appconf{conf = Conf} ->
-            case find_value("notify_cb", Conf) of
+            case find_value(notify_cb, Conf) of
                 undefined -> ok;
                 [ModStr, FunStr] ->
                     Mod = erlang:list_to_atom(ModStr),
@@ -321,19 +306,60 @@ notify_cb(File) ->
     end.
 %%--------------------------------------------------------------------
 %% @doc
-%% Read YAML configuration files and return a proplist representation
-%% of given configuration.
+%% Read JSON configuration files and return a proplist representation of
+%% given configuration.
 %% @end
 %%--------------------------------------------------------------------
 -spec read_config(Filename :: string()) -> {ok, Conf :: term()} | {error, Reason :: any()}.
 read_config(Filename) ->
-    case catch yamerl_constr:file(Filename) of
-	{'EXIT', Reason} ->
-	    error_logger:error_msg("file:read_file(~p) -> ~p.~n", [Filename, {'EXIT', Reason}]),
-	    {error, {'EXIT', Reason}};
-        YamlDocs ->
-		{ok, YamlDocs}
+    case file:read_file(Filename) of
+        {ok, Binary} ->
+            case catch mochijson2:decode(Binary, [{format, proplist}]) of
+                {'EXIT', Reason} ->
+                    error_logger:error_msg("file:read_file(~p) -> ~p.~n", [Filename, {'EXIT', Reason}]),
+                    {error, {'EXIT', Reason}};
+                JsonTypes ->
+                    case json_to_term(JsonTypes) of
+                        {ok, Conf} ->
+                            {ok, Conf};
+                        {error, Reason} ->
+                            {error, Reason}
+                    end
+            end;
+        {error, Reason} ->
+            error_logger:error_msg("file:read_file(~p) -> ~p.~n", [Filename, {error, Reason}])
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Convert mochijson2 decoded binaries to strings
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec json_to_term(JsonTypes :: term()) -> {ok, Conf :: [{atom(), term()}]} | {error, Reason :: any()}.
+json_to_term(JsonTypes)->
+    {ok, json_to_term(JsonTypes, [])}.
+
+json_to_term([], Acc) ->
+    lists:reverse(Acc);
+json_to_term([{JK, JV} | Rest], Acc)->
+    K = erlang:binary_to_atom(JK, latin1),
+    V = case JV of
+            _ when is_list(JV) ->
+                json_to_term(JV, []);
+            _ when is_binary(JV) ->
+                erlang:binary_to_list(JV);
+            _ ->
+                JV
+         end,
+    json_to_term(Rest, [{K,V} | Acc]);
+json_to_term([JV | Rest], Acc) when is_binary(JV) ->
+    V = erlang:binary_to_list(JV),
+    json_to_term(Rest, [V | Acc]);
+json_to_term([V | Rest], Acc) when is_integer(V) ->
+    json_to_term(Rest, [V | Acc]);
+json_to_term([V | Rest], Acc) when is_float(V) ->
+    json_to_term(Rest, [V | Acc]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -350,7 +376,7 @@ do_load(AppName, File, MaxKeeps)->
         PrivDir ->
             Filename = filename:join(PrivDir, File),
             case read_config(Filename) of
-                {ok, [Conf|_]} ->
+                {ok, Conf} ->
                     AppConf = #gb_conf_appconf{name = File,
                                                appname = AppName,
                                                file = Filename,
@@ -364,9 +390,6 @@ do_load(AppName, File, MaxKeeps)->
                         Else ->
                             Else
                     end;
-		{ok, []} ->
-                    error_logger:error_msg("Empty configuration file for app: ~p file: ~p", [AppName, File]),
-		    {error, "no_yaml_doc"};
                 {error, Reason} ->
                     error_logger:error_msg("Cannot read configuration for app: ~p file: ~p", [AppName, File]),
                     {error, Reason}
@@ -389,7 +412,7 @@ init_load([{AppName, File} | Rest], MaxKeeps) ->
         PrivDir ->
             Filename = filename:join(PrivDir, File),
             case read_config(Filename) of
-                {ok, [Conf|_]} ->
+                {ok, Conf} ->
                     AppConf = #gb_conf_appconf{name = File,
                                                appname = AppName,
                                                file = Filename,
@@ -399,13 +422,11 @@ init_load([{AppName, File} | Rest], MaxKeeps) ->
                     {ok, Version} = store(AppConf, MaxKeeps),
                     error_logger:info_msg("Stored configuration of gb_conf app, Version: ~p~n",[Version]),
                     do_activate(File, Version);
-		{ok, []} ->
-                    error_logger:error_msg("Empty configuration file for app: ~p file: ~p", [AppName, File]);
                 {error, Reason} ->
                     error_logger:error_msg("Cannot read configuration for app: ~p file: ~p, error: ~p~n", [AppName, File, Reason])
             end
-    end,
-    init_load(Rest, MaxKeeps).
+        end,
+        init_load(Rest, MaxKeeps).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -425,7 +446,7 @@ find_value(Key, Conf)->
 %%--------------------------------------------------------------------
 -spec find_param(Key::atom(), Conf::[{atom(), term()}]) -> Value::term() | undefined.
 find_param(Key, Conf)->
-    case proplists:get_value("params", Conf) of
+    case proplists:get_value(params, Conf) of
         undefined ->
             proplists:get_value(Key, Conf);
         PList when is_list(PList) ->
@@ -543,9 +564,9 @@ find_version_conf([#gb_conf_appconf{version = V} = Active| _], V)->
 find_version_conf([_| Rest], V)->
     find_version_conf(Rest, V).
 
--spec get_active_conf(File::string())-> #gb_conf_appconf{} | undefined | {error, Reason::term()}.
-get_active_conf(File) ->
-    case gb_conf_db:transaction(fun()-> mnesia:read(gb_conf_appconf, File) end) of
+-spec get_active_conf(JSON::string())-> #gb_conf_appconf{} | undefined | {error, Reason::term()}.
+get_active_conf(JSON) ->
+    case gb_conf_db:transaction(fun()-> mnesia:read(gb_conf_appconf, JSON) end) of
         {atomic, AppConfList} ->
             case find_active_conf(AppConfList) of
                 undefined ->
@@ -557,9 +578,9 @@ get_active_conf(File) ->
             {error, Reason}
     end.
 
--spec get_latest_conf_version(File::string())-> #gb_conf_appconf{} | undefined | {error, Reason::term()}.
-get_latest_conf_version(File) ->
-    case gb_conf_db:transaction(fun()-> mnesia:read(gb_conf_appconf, File) end) of
+-spec get_latest_conf_version(JSON::string())-> #gb_conf_appconf{} | undefined | {error, Reason::term()}.
+get_latest_conf_version(JSON) ->
+    case gb_conf_db:transaction(fun()-> mnesia:read(gb_conf_appconf, JSON) end) of
         {atomic, AppConfList} ->
             find_top_version(AppConfList);
         {error, Reason} ->
@@ -580,7 +601,7 @@ check_configurations(Configurations, MaxKeeps) ->
         Acc::[string()])-> ok.
 find_removed_configurations([], _, Acc) ->
     Acc;
-find_removed_configurations(["gb_conf.yaml" | Rest], Configurations, Acc) ->
+find_removed_configurations(["gb_conf.json" | Rest], Configurations, Acc) ->
     find_removed_configurations(Rest, Configurations, Acc);
 find_removed_configurations([AppConf | Rest], Configurations, Acc) ->
     case lists:keymember(AppConf, 2, Configurations) of
@@ -605,7 +626,7 @@ find_added_configurations([{AppName, File} | Rest], AllConf, Acc) ->
 
 -spec check_num_of_versions_to_keep(MaxKeep::pos_integer()) -> ok.
 check_num_of_versions_to_keep(MaxKeep) -> 
-    AppConfList = mnesia:read(gb_conf_appconf, "gb_conf.yaml"),
+    AppConfList = mnesia:read(gb_conf_appconf, "gb_conf.json"),
     Length = length(AppConfList),
     if Length =< MaxKeep ->
             ok;
@@ -621,13 +642,13 @@ delete_versions(Num) ->
 -spec delete_versions(Num::pos_integer(), AllConf::[string()]) -> ok.
 delete_versions(_Num, []) ->
     ok;
-delete_versions(Num, [File | Rest]) ->
-    delete_oldest_n_versions(Num, File),
+delete_versions(Num, [JSON | Rest]) ->
+    delete_oldest_n_versions(Num, JSON),
     delete_versions(Num, Rest).
 
--spec delete_oldest_n_versions(Num::pos_integer(), File::string()) -> ok.
-delete_oldest_n_versions(Num, File) ->
-    AppConfList = mnesia:read(gb_conf_appconf, File),
+-spec delete_oldest_n_versions(Num::pos_integer(), JSON::string()) -> ok.
+delete_oldest_n_versions(Num, JSON) ->
+    AppConfList = mnesia:read(gb_conf_appconf, JSON),
     Sorted = lists:keysort(#gb_conf_appconf.version, AppConfList),
     delete_n_if_inactive(Num, Sorted).
 
@@ -639,4 +660,4 @@ delete_n_if_inactive(N, [#gb_conf_appconf{active = true} | Rest]) ->
 delete_n_if_inactive(N, [Del = #gb_conf_appconf{active = false} | Rest]) ->
     mnesia:delete_object(Del),
     delete_n_if_inactive(N-1, Rest).
-
+    

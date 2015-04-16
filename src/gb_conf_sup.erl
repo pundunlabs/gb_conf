@@ -52,20 +52,25 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    RestartStrategy = one_for_one,
-    MaxRestarts = 1000,
-    MaxSecondsBetweenRestarts = 3600,
+    case mnesia:wait_for_tables([gb_conf_appconf], 20000) of
+            {timeout,   RemainingTabs} ->
+              {error, {no_exists,RemainingTabs}};
+            ok ->
+		RestartStrategy = one_for_one,
+		MaxRestarts = 1000,
+		MaxSecondsBetweenRestarts = 3600,
 
-    SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
+		SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
 
-    Restart = permanent,
-    Shutdown = 2000,
-    Type = worker,
+		Restart = permanent,
+		Shutdown = 2000,
+		Type = worker,
 
-    AChild = {'gb_conf', {'gb_conf', start_link, []},
-	      Restart, Shutdown, Type, ['gb_conf']},
+		_AChild = {'gb_conf', {'gb_conf', start_link, []},
+			    Restart, Shutdown, Type, ['gb_conf']},
 
-    {ok, {SupFlags, [AChild]}}.
+		{ok, {SupFlags, []}}
+    end.
 
 %%%===================================================================
 %%% Internal functions
