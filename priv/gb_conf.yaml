@@ -9,6 +9,8 @@ params:
     mnesia_nodes            : [] #List of erlang node names. Empty list defaults to node()
     db_mods                 : [gb_conf_db, gb_hash_db, enterdb_db]
     num_of_versions_to_keep : 5
-    configurations          :
-        enterdb : "enterdb.yaml"
-        gb_log  : "gb_log.yaml"
+    configurations          : {
+	pundun  : "pundun.yaml",
+	enterdb : "enterdb.yaml",
+	gb_log  : "gb_log.yaml"
+    }

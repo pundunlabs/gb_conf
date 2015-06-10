@@ -224,7 +224,7 @@ load("gb_conf.yaml")->
 load(File) ->
     Transaction =
         fun() ->
-            Configurations = get_param("configurations", "gb_conf.yaml"),
+            Configurations = get_param("gb_conf.yaml", "configurations"),
             case lists:keyfind(File, 2, Configurations) of
                 false ->
                     {error, unknown_conf};
@@ -311,6 +311,7 @@ notify_cb(File) ->
         #gb_conf_appconf{conf = Conf} ->
             case find_value("notify_cb", Conf) of
                 undefined -> ok;
+		[] -> ok;
                 [ModStr, FunStr] ->
                     Mod = erlang:list_to_atom(ModStr),
                     Fun = erlang:list_to_atom(FunStr),
@@ -359,7 +360,7 @@ do_load(AppName, File, MaxKeeps)->
                                                conf = Conf},
                     case store(AppConf, MaxKeeps) of
                         {ok, Version} ->
-                            error_logger:info_msg("Stored configuration of gb_conf app, Version: ~p~n",[Version]),
+                            error_logger:info_msg("Stored configuration of ~p app, Version: ~p~n",[File, Version]),
                             {ok, Version};
                         Else ->
                             Else
