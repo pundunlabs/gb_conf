@@ -12,5 +12,6 @@ params:
     configurations          : {
 	pundun  : "pundun.yaml",
 	enterdb : "enterdb.yaml",
+	gb_dyno  : "gb_dyno.yaml",
 	gb_log  : "gb_log.yaml"
     }
