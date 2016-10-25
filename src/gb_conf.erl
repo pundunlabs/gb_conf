@@ -41,7 +41,6 @@ db_init()->
     PrivDir = code:priv_dir(gb_conf),
     Filename = filename:join(PrivDir, "gb_conf.yaml"),
     error_logger:info_msg("GB Configuration: Read  ~p~n", [Filename]),
-    application:start(yamerl),
     case read_config(Filename) of
         {ok, [Conf|_]} ->
             error_logger:info_msg("read_config(~p) -> ~p.~n", [Filename, {ok, Conf}]),
@@ -56,20 +55,7 @@ db_init()->
             error_logger:info_msg("gb_conf_db:create_schema(~p) -> ~p~n",
                 [MnesiaNodes, CS_Result]),
             application:start(mnesia),
-            CT_Result = [Mod:create_tables(MnesiaNodes)|| Mod <- DbMods],
-            error_logger:info_msg("Create Tables: ~p~n", [CT_Result]),
-            AppConf = #gb_conf_appconf{name = "gb_conf.yaml",
-                                       appname = "gb_conf",
-                                       file = Filename,
-                                       version = undefined,
-                                       active = false,
-                                       conf = Conf},
-            MaxKeeps = find_param("num_of_versions_to_keep", Conf),
-            {ok, Version} = store(AppConf, MaxKeeps),
-            error_logger:info_msg("Stored configuration of gb_conf app, Version: ~p~n",[Version]),
-            do_activate("gb_conf.yaml", Version),
-            Configurations = find_param("configurations", Conf),
-            ok = init_load(Configurations, MaxKeeps);
+	    db_init_(CS_Result, MnesiaNodes, DbMods, Filename, Conf);
 	{ok, []} ->
             error_logger:error_msg("Empty configuration file: ~p", [Filename]),
 	    {error, "no_yaml_doc"};
@@ -77,6 +63,31 @@ db_init()->
             {error, Reason}
     end.
     
+-spec db_init_(CS_Result :: ok | {error, Reason :: term()},
+	       MnesiaNodes :: [node()], DbMods :: [atom()],
+	       Filename :: string(),
+	       Conf :: term()) ->
+    ok | {error, Reason :: any()}.
+
+db_init_({error,{_N,{already_exists,_Node}}}, _, _, _, _) ->
+    ok;
+db_init_(ok, MnesiaNodes, DbMods, Filename, Conf) ->
+    CT_Result = [Mod:create_tables(MnesiaNodes)|| Mod <- DbMods],
+    error_logger:info_msg("Create Tables: ~p~n", [CT_Result]),
+    AppConf = #gb_conf_appconf{name = "gb_conf.yaml",
+                               appname = "gb_conf",
+                               file = Filename,
+                               version = undefined,
+                               active = false,
+                               conf = Conf},
+    MaxKeeps = find_param("num_of_versions_to_keep", Conf),
+    {ok, Version} = store(AppConf, MaxKeeps),
+    error_logger:info_msg("Stored configuration of gb_conf app, Version: ~p~n",
+			  [Version]),
+    do_activate("gb_conf.yaml", Version),
+    Configurations = find_param("configurations", Conf),
+    ok = init_load(Configurations, MaxKeeps).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Notification function to be called when a gb_conf.yaml document

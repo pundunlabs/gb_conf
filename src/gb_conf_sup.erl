@@ -52,6 +52,14 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
+    case gb_conf:db_init() of
+	ok ->
+	    init_();
+	{error, Reason} ->
+	    {error, Reason}
+    end.
+
+init_() ->
     case mnesia:wait_for_tables([gb_conf_appconf], 20000) of
             {timeout,   RemainingTabs} ->
               {error, {no_exists,RemainingTabs}};
