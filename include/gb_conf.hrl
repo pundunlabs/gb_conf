@@ -10,6 +10,5 @@
                          }).
 
 
-%% set -define(db_conf_default, "yourapp.json") to define default param scope
 -define(gb_conf_get(Name), gb_conf:get_param(?gb_conf_default, Name)).
 -define(gb_conf_get(Name, Default), gb_conf:get_param(?gb_conf_default, Name, Default)).
