@@ -12,7 +12,8 @@
 -export([db_init/0]).
 
 -export([get_param/2,
-         get_param/3]).
+         get_param/3,
+	 get_all_params/1]).
 
 -export([list/0,
 	 versions/1,
@@ -62,7 +63,6 @@ db_init()->
         {error, Reason} ->
             {error, Reason}
     end.
-    
 -spec db_init_(CS_Result :: ok | {error, Reason :: term()},
 	       MnesiaNodes :: [node()], DbMods :: [atom()],
 	       Filename :: string(),
@@ -149,6 +149,19 @@ get_param(File, Key, Default) ->
             Default
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Get all params for given YAML file basename. If not found, return []
+%%
+%%--------------------------------------------------------------------
+
+get_all_params(File) ->
+    case get_active_conf(File) of
+        #gb_conf_appconf{conf = Conf} ->
+            Conf;
+        _ ->
+            []
+    end.
 %%--------------------------------------------------------------------
 %% @doc
 %% List the configuration files that are loaded on the system
