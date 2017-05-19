@@ -69,9 +69,14 @@ db_init()->
 	       Conf :: term()) ->
     ok | {error, Reason :: any()}.
 
-db_init_({error,{_N,{already_exists,_Node}}}, _, _, _, _) ->
-    ok;
-db_init_(ok, MnesiaNodes, DbMods, Filename, Conf) ->
+db_init_({error,{_N,{already_exists,_Node}}}, MnesiaNodes, DbMods, Filename, Conf) ->
+    case gb_conf_db:db_exists() of
+	true ->
+	    ok;
+	_ ->
+	    db_init_(ok, MnesiaNodes, DbMods, Filename, Conf)
+    end;
+db_init_(_, MnesiaNodes, DbMods, Filename, Conf) ->
     CT_Result = [Mod:create_tables(MnesiaNodes)|| Mod <- DbMods],
     error_logger:info_msg("Create Tables: ~p~n", [CT_Result]),
     AppConf = #gb_conf_appconf{name = "gb_conf.yaml",
