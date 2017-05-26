@@ -422,7 +422,7 @@ init_load([{AppName, File} | Rest], MaxKeeps) ->
                                                active = false,
                                                conf = Conf},
                     {ok, Version} = store(AppConf, MaxKeeps),
-                    error_logger:info_msg("Stored configuration of gb_conf app, Version: ~p~n",[Version]),
+                    error_logger:info_msg("Stored configuration of ~p app, Version: ~p~n",[File, Version]),
                     do_activate(File, Version);
 		{ok, []} ->
                     error_logger:error_msg("Empty configuration file for app: ~p file: ~p", [AppName, File]);

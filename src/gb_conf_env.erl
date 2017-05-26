@@ -21,7 +21,7 @@
 %% Get production root directory.
 -spec proddir() -> list().
 proddir() ->
-    case os:getenv("PRODDIR") of 
+    case os:getenv("ROOTDIR") of 
 	false ->
 	    throw(no_such_config);
 	DIR ->
