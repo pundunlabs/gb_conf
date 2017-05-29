@@ -23,9 +23,9 @@
 %%%===================================================================
 
 db_exists() ->
-    case catch mnesia:table_info(gb_conf_appconf, type) of
-	bag ->
-	    true;
+    case catch mnesia:system_info(tables) of
+	Tables when is_list(Tables) ->
+	    lists:member(gb_conf_appconf, Tables);
 	_ ->
 	    false
     end.
