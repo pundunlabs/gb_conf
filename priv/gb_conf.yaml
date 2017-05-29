@@ -10,6 +10,8 @@ params:
     db_mods                 : [gb_conf_db]
     num_of_versions_to_keep : 5
     configurations          : {
-	gb_log  : "gb_log.yaml",
-	pundun_client  : "pundun_client.yaml"
+	pundun  : "pundun.yaml",
+	enterdb : "enterdb.yaml",
+	gb_dyno  : "gb_dyno.yaml",
+	gb_log  : "gb_log.yaml"
     }
