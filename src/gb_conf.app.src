@@ -3,6 +3,6 @@
   {vsn, "0.1"},
   {modules, []},
   {registered, []},
-  {applications, [kernel, stdlib, yamerl]},
+  {applications, [kernel, stdlib, mnesia, yamerl]},
   {mod, {gb_conf_app,[]}}
  ]}.

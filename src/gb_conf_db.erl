@@ -14,12 +14,21 @@
 
 -export([transaction/1]).
 
+-export([db_exists/0]).
+
 -include("gb_conf.hrl").
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+db_exists() ->
+    case catch mnesia:system_info(tables) of
+	Tables when is_list(Tables) ->
+	    lists:member(gb_conf_appconf, Tables);
+	_ ->
+	    false
+    end.
 %%--------------------------------------------------------------------
 %% @doc
 %% Create Mnesia schema on given Nodes.
