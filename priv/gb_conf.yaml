@@ -7,7 +7,7 @@ verify_cb : # alternative yaml list representation
   - verify  # Function name
 params:
     mnesia_nodes            : [] #List of erlang node names. Empty list defaults to node()
-    db_mods                 : [gb_conf_db]
+    db_mods                 : [gb_conf_db, gb_hash_db, enterdb_db, pundun_user_db]
     num_of_versions_to_keep : 5
     configurations          : {
 	pundun  : "pundun.yaml",
