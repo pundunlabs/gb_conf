@@ -41,6 +41,8 @@ db_init()->
     %% Read the configuration to get mnesia topology
     PrivDir = code:priv_dir(gb_conf),
     Filename = filename:join(PrivDir, "gb_conf.yaml"),
+    Source = find_gb_conf_yaml(),
+    {ok, _} = file:copy(Source, Filename),
     error_logger:info_msg("GB Configuration: Read  ~p~n", [Filename]),
     case read_config(Filename) of
         {ok, [Conf|_]} ->
@@ -670,3 +672,34 @@ delete_n_if_inactive(N, [Del = #gb_conf_appconf{active = false} | Rest]) ->
     mnesia:delete_object(Del),
     delete_n_if_inactive(N-1, Rest).
 
+-spec find_gb_conf_yaml() -> string().
+find_gb_conf_yaml() ->
+    Path = code:get_path(),
+    case find_file("gb_conf.yaml", "priv", Path) of
+	{ok, File} ->
+	    File;
+	{error, not_found} ->
+	    PrivDir = code:priv_dir(gb_conf),
+	    filename:join(PrivDir, "gb_conf.yaml.default")
+    end.
+
+-spec find_file(File :: string(),
+		Subdir :: string(),
+		Path :: [string()]) ->
+    {ok, string()} | {error, not_found}.
+find_file(File, Subdir, [Path | Rest]) ->
+    Dir = filename:dirname(Path),
+    PrivDir = filename:join(Dir, Subdir),
+    case erl_prim_loader:list_dir(PrivDir) of
+	{ok,Files} ->
+	    case lists:member(File, Files) of
+		true ->
+		    {ok, filename:join(PrivDir, File)};
+		false ->
+		    find_file(File, Subdir, Rest)
+	    end;
+	_Error ->
+	    find_file(File, Subdir, Rest)
+    end;
+find_file(_File, _Subdir, []) ->
+    {error, not_found}.
