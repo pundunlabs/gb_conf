@@ -71,8 +71,7 @@ create_table(Nodes, Name) when Name == gb_conf_appconf->
               {disc_copies, Nodes},
               {load_order, 99},
               {record_name, Name},
-              {type, bag}
-              ],
+              {type, bag}],
     mnesia:create_table(Name, TabDef);
 create_table(_, _) ->
     {error, "Unknown table definition"}.

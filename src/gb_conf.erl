@@ -70,8 +70,7 @@ db_init()->
 	       Filename :: string(),
 	       Conf :: term()) ->
     ok | {error, Reason :: any()}.
-
-db_init_({error,{_N,{already_exists,_Node}}}, MnesiaNodes, DbMods, Filename, Conf) ->
+db_init_({error,{_,{already_exists,_}}}, MnesiaNodes, DbMods, Filename, Conf) ->
     case gb_conf_db:db_exists() of
 	true ->
 	    ok;
