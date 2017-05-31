@@ -42,7 +42,7 @@ db_init()->
     PrivDir = code:priv_dir(gb_conf),
     Filename = filename:join(PrivDir, "gb_conf.yaml"),
     Source = find_gb_conf_yaml(),
-    {ok, _} = file:copy(Source, Filename),
+    copy_file(Source, Filename),
     error_logger:info_msg("GB Configuration: Read  ~p~n", [Filename]),
     case read_config(Filename) of
         {ok, [Conf|_]} ->
@@ -702,3 +702,8 @@ find_file(File, Subdir, [Path | Rest]) ->
     end;
 find_file(_File, _Subdir, []) ->
     {error, not_found}.
+
+copy_file(Src, Src) ->
+    ok;
+copy_file(Src, Dst) ->
+    {ok, _} = file:copy(Src, Dst).
