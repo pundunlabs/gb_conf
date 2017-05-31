@@ -21,9 +21,10 @@
 %% Get production root directory.
 -spec proddir() -> list().
 proddir() ->
-    case os:getenv("ROOTDIR") of 
+    Env = gb_conf:get_param("gb_conf.yaml", prod_dir_env, "PRODDIR"),
+    case os:getenv(Env) of
 	false ->
-	    throw(no_such_config);
+	    throw({no_such_env, Env});
 	DIR ->
 	    DIR
     end.
